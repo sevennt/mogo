@@ -23,7 +23,7 @@ archives:
   - id: mogo
     builds:
       - mogo
-    name_template: "mogo-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "mogo-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - LICENSE
       - configs/*

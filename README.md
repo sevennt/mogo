@@ -45,20 +45,22 @@ docker-compose up
 
 ```bash
 # download release
-# go to https://github.com/shimohq/mogo/releases and choose specific release to download.
+# get latest version
 latest=$(curl -sL https://api.github.com/repos/shimohq/mogo/releases/latest | grep  ".tag_name" | sed -E 's/.*"([^"]+)".*/\1/')
 
-# for MacOS
-wget https://github.com/shimohq/mogo/releases/download/${latest}/mogo_${latest}_darwin_x86_64.tar.gz -O mogo.tar.gz 
+# for MacOS amd64
+wget "https://github.com/shimohq/mogo/releases/download/${latest}/mogo-${latest}-darwin-amd64.tar.gz" -O mogo-${latest}.tar.gz 
 
-# for Linux
-wget https://github.com/shimohq/mogo/releases/download/${latest}/mogo_${latest}_linux_x86_64.tar.gz -O mogo.tar.gz  
+# for Linux amd64
+wget "https://github.com/shimohq/mogo/releases/download/${latest}/mogo-${latest}-linux-amd64.tar.gz" -O mogo-$(latest).tar.gz  
 
 # extract zip file to current directory
-tar -zxvf mogo.tar.gz -C ./
+mkdir -p ./mogo-$(latest) && tar -zxvf mogo-$(latest).tar.gz -C ./mogo-$(latest) && cd ./mogo-$(latest)
+
+# open config/default.toml, then change database and redis or other section configuration
 
 # start mogo
-./mogo -config config/local.toml
+./mogo -config config/default.toml
 
 # then go to browser and visit http://localhost:9001
 # login username: admin
