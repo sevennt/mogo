@@ -2,10 +2,12 @@
 # Make sure to check the documentation at http://goreleaser.com
 before:
   hooks:
+    - ls -rtlh
+    - ls -rtlh api/internal/ui/dist
     - go mod download -x
 builds:
   - id: mogo
-    main: ./api/protoc-gen-go-errors
+    main: ./api
     env:
       - CGO_ENABLED=0
     goos:
