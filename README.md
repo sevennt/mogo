@@ -30,13 +30,13 @@ Mogo is a lightweight browser-based logs analytics and logs search platform for 
 - For Docker
 
 ```bash
-# clone mogo source code
+# clone mogo source code.
 git clone https://github.com/shimohq/mogo.git
 
 # you may need to set docker image mirror, visit <https://github.com/yeasy/docker_practice/blob/master/install/mirror.md> for details.
 docker-compose up
 
-# then go to browser and visit http://localhost:9001
+# then go to browser and visit http://localhost:9001.
 # login username: admin
 # login password: admin
 ```
@@ -44,21 +44,21 @@ docker-compose up
 - For host
 
 ```bash
-# download release
-# get latest version
+# download release.
+# get latest version.
 latest=$(curl -sL https://api.github.com/repos/shimohq/mogo/releases/latest | grep  ".tag_name" | sed -E 's/.*"([^"]+)".*/\1/')
 
-# for MacOS amd64
+# for MacOS amd64.
 wget "https://github.com/shimohq/mogo/releases/download/${latest}/mogo-${latest}-darwin-amd64.tar.gz" -O mogo-${latest}.tar.gz 
 
-# for Linux amd64
+# for Linux amd64.
 wget "https://github.com/shimohq/mogo/releases/download/${latest}/mogo-${latest}-linux-amd64.tar.gz" -O mogo-$(latest).tar.gz  
 
-# extract zip file to current directory
+# extract zip file to current directory.
 mkdir -p ./mogo-$(latest) && tar -zxvf mogo-$(latest).tar.gz -C ./mogo-$(latest) && cd ./mogo-$(latest)
 
 # open config/default.toml, then change database and redis or other section configuration
-
+# execute migration latest sql script in scripts/migration directory
 # start mogo
 ./mogo -config config/default.toml
 

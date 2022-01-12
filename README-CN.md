@@ -57,6 +57,7 @@ wget https://github.com/shimohq/mogo/releases/download/${latest}/mogo_${latest}_
 mkdir -p ./mogo-$(latest) && tar -zxvf mogo-$(latest).tar.gz -C ./mogo-$(latest) && cd ./mogo-$(latest)
 
 # 修改 config/default.toml 配置文件
+# 执行 scripts/migration 下迁移脚本，创建数据库和表
 # 启动 mogo
 ./mogo -config config/default.toml
 

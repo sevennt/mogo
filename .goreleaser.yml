@@ -27,6 +27,7 @@ archives:
     files:
       - LICENSE
       - configs/*
+      - scripts/migration
       - docker-compose.yml
 checksum:
   name_template: 'checksums.txt'
