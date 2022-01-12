@@ -55,7 +55,7 @@ wget https://github.com/shimohq/mogo/releases/download/${latest}/mogo_${latest}_
 wget https://github.com/shimohq/mogo/releases/download/${latest}/mogo_${latest}_linux_x86_64.tar.gz -O mogo.tar.gz  
 
 # extract zip file to current directory
-tar -xvf mogo.tar.gz -C ./
+tar -zxvf mogo.tar.gz -C ./
 
 # start mogo
 ./mogo -config config/local.toml
