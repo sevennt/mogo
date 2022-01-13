@@ -30,6 +30,7 @@ archives:
       - docker-compose.yml
       - src: api/config/*
         dst: config
+        strip_parent: true
 checksum:
   name_template: 'checksums.txt'
 snapshot:
