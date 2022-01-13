@@ -28,8 +28,8 @@ archives:
       - LICENSE
       - scripts/migration
       - docker-compose.yml
-      - src: api/configs/*
-        dst: configs
+      - src: api/config/*
+        dst: config
 checksum:
   name_template: 'checksums.txt'
 snapshot:
