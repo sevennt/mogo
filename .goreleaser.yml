@@ -26,9 +26,10 @@ archives:
     name_template: "mogo-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     files:
       - LICENSE
-      - configs/*
       - scripts/migration
       - docker-compose.yml
+      - src: api/configs/*
+        dst: configs
 checksum:
   name_template: 'checksums.txt'
 snapshot:
