@@ -7,10 +7,21 @@ import (
 )
 
 const (
-	TableNameUser     = "mogo_user"
-	TableNameIndex    = "mogo_index"
-	TableNameCluster  = "mogo_cluster"
-	TableNameInstance = "mogo_instance"
+	TableNameView     = "mogo_base_view"
+	TableNameTable    = "mogo_base_table"
+	TableNameIndex    = "mogo_base_index"
+	TableNameDatabase = "mogo_base_database"
+	TableNameInstance = "mogo_base_instance"
+
+	TableNameUser = "mogo_user"
+
+	TableNameCluster = "mogo_cluster"
+
+	TableNameConfiguration        = "mogo_configuration"
+	TableNameConfigurationHistory = "mogo_configuration_history"
+	TableNameConfigurationPublish = "mogo_configuration_publish"
+
+	TableNameK8SConfigMap = "mogo_k8s_cm"
 )
 
 type BaseModel struct {
@@ -21,9 +32,8 @@ type BaseModel struct {
 }
 
 type ReqPage struct {
-	Current  int    `json:"current" form:"current"`
-	PageSize int    `json:"pageSize" form:"pageSize"`
-	Sort     string `json:"sort" form:"sort"`
+	Current  int `json:"current" form:"current"`
+	PageSize int `json:"pageSize" form:"pageSize"`
 }
 
 func (r *ReqPage) Valid() error {

@@ -14,11 +14,11 @@ import (
 
 // Instance 服务配置存储
 type Instance struct {
-	BaseModel
-
 	Datasource string `gorm:"column:datasource" db:"datasource" json:"datasource" form:"datasource"` // 数据源类型
 	Name       string `gorm:"column:name" db:"name" json:"instanceName" form:"name"`                 // 实例名称
 	Dsn        string `gorm:"column:dsn" db:"dsn" json:"dsn" form:"dsn"`                             // dsn
+
+	BaseModel
 }
 
 func (t *Instance) TableName() string {
@@ -26,11 +26,11 @@ func (t *Instance) TableName() string {
 }
 
 func (t *Instance) DsKey() string {
-	return InstanceKey(t.Datasource, t.Name)
+	return InstanceKey(t.ID)
 }
 
-func InstanceKey(datasource, name string) string {
-	return fmt.Sprintf("%s-%s", datasource, name)
+func InstanceKey(id int) string {
+	return fmt.Sprintf("%d", id)
 }
 
 const (
@@ -48,6 +48,7 @@ func InstanceList(conds egorm.Conds, extra ...string) (resp []*Instance, err err
 	if sorts == "" {
 		sorts = "id desc"
 	}
+
 	if err = invoker.Db.Model(Instance{}).Where(sql, binds...).Order(sorts).Find(&resp).Error; err != nil {
 		elog.Error("ConfigMap list error", zap.Error(err))
 		return
@@ -96,6 +97,17 @@ func InstanceUpdate(db *gorm.DB, id int, ups map[string]interface{}) (err error)
 	var binds = []interface{}{id}
 	if err = db.Model(Instance{}).Where(sql, binds...).Updates(ups).Error; err != nil {
 		elog.Error("release update error", zap.Error(err))
+		return
+	}
+	return
+}
+
+// InstanceInfoX Info extension method to query a single record according to Cond
+func InstanceInfoX(db *gorm.DB, conds map[string]interface{}) (resp Instance, err error) {
+	conds["dtime"] = 0
+	sql, binds := egorm.BuildQuery(conds)
+	if err = db.Table(TableNameInstance).Where(sql, binds...).First(&resp).Error; err != nil && err != gorm.ErrRecordNotFound {
+		elog.Error("infoX error", zap.Error(err))
 		return
 	}
 	return

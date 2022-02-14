@@ -1,7 +1,9 @@
+@import "../../../styles/var.less";
 .clusterPanelMain {
   display: flex;
   flex: 1;
   flex-direction: column;
+  padding: 5px 15px;
 
   .searchBar {
     display: flex;
@@ -27,8 +29,11 @@
     flex: 1;
     overflow-y: auto;
     .icon {
-      color: #1890ff;
+      color: @primary-color;
       cursor: pointer;
+    }
+    .renderText {
+      cursor: default;
     }
   }
 }

@@ -2,12 +2,16 @@ package inquiry
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/gotomicro/ego/core/elog"
 	"github.com/kl7sn/toolkit/kfloat"
+	"github.com/spf13/cast"
 
+	"github.com/shimohq/mogo/api/internal/invoker"
 	"github.com/shimohq/mogo/api/internal/service"
 	"github.com/shimohq/mogo/api/pkg/component/core"
+	"github.com/shimohq/mogo/api/pkg/model/db"
 	"github.com/shimohq/mogo/api/pkg/model/view"
 )
 
@@ -15,21 +19,34 @@ func Logs(c *core.Context) {
 	var param view.ReqQuery
 	err := c.Bind(&param)
 	if err != nil {
-		c.JSONE(core.CodeErr, "参数无效: "+err.Error(), nil)
+		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
 		return
 	}
+	id := cast.ToInt(c.Param("id"))
+	if id == 0 {
+		c.JSONE(core.CodeErr, "params error", nil)
+		return
+	}
+	tableInfo, _ := db.TableInfo(invoker.Db, id)
+	param.Table = tableInfo.Name
+	param.Database = tableInfo.Database.Name
 	if param.Database == "" || param.Table == "" {
-		c.JSONE(core.CodeErr, "db 和 table 为必填字段", nil)
+		c.JSONE(core.CodeErr, "db and table are required fields", nil)
 		return
 	}
-	op := service.InstanceManager.Load(param.DatasourceType, param.InstanceName)
-	if op == nil {
-		c.JSONE(core.CodeErr, "不存在对应配置实例:  ", nil)
-		return
-	}
-	res, err := op.GET(op.Prepare(param))
+	op, err := service.InstanceManager.Load(tableInfo.Database.Iid)
 	if err != nil {
-		c.JSONE(core.CodeErr, "查询失败. "+err.Error(), nil)
+		c.JSONE(core.CodeErr, err.Error(), nil)
+		return
+	}
+	param, err = op.Prepare(param)
+	if err != nil {
+		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
+		return
+	}
+	res, err := op.GET(param, tableInfo.ID)
+	if err != nil {
+		c.JSONE(core.CodeErr, "query failed: "+err.Error(), nil)
 		return
 	}
 	c.JSONOK(res)
@@ -40,23 +57,35 @@ func Charts(c *core.Context) {
 	var param view.ReqQuery
 	err := c.Bind(&param)
 	if err != nil {
-		c.JSONE(core.CodeErr, "参数无效: "+err.Error(), nil)
+		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
 		return
 	}
+	id := cast.ToInt(c.Param("id"))
+	if id == 0 {
+		c.JSONE(core.CodeErr, "params error", nil)
+		return
+	}
+	tableInfo, _ := db.TableInfo(invoker.Db, id)
+	param.Table = tableInfo.Name
+	param.Database = tableInfo.Database.Name
 	if param.Database == "" || param.Table == "" {
-		c.JSONE(core.CodeErr, "db 和 table 为必填字段", nil)
+		c.JSONE(core.CodeErr, "db and table are required fields", nil)
 		return
 	}
-	op := service.InstanceManager.Load(param.DatasourceType, param.InstanceName)
-	if op == nil {
-		c.JSONE(core.CodeErr, "不存在对应配置实例:  ", nil)
+	op, err := service.InstanceManager.Load(tableInfo.Database.Iid)
+	if err != nil {
+		c.JSONE(core.CodeErr, err.Error(), nil)
 		return
 	}
 	// Calculate 50 intervals
 	res := view.HighCharts{
 		Histograms: make([]view.HighChart, 0),
 	}
-	param = op.Prepare(param)
+	param, err = op.Prepare(param)
+	if err != nil {
+		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
+		return
+	}
 	interval := (param.ET - param.ST) / 50
 	isZero := true
 	elog.Debug("Charts", elog.Any("interval", interval), elog.Any("st", param.ST), elog.Any("et", param.ET))
@@ -73,113 +102,118 @@ func Charts(c *core.Context) {
 		}
 		res.Histograms = append(res.Histograms, row)
 	} else {
+		limiter := make(chan view.HighChart, 100)
+		wg := &sync.WaitGroup{}
 		for i := param.ST; i <= param.ET; i += interval {
-			row := view.HighChart{
-				Count: op.Count(view.ReqQuery{
-					DatasourceType: param.DatasourceType,
-					Table:          param.Table,
-					DatabaseTable:  param.DatabaseTable,
-					Query:          param.Query,
-					ST:             i,
-					ET:             i + interval,
-					Page:           param.Page,
-					PageSize:       param.PageSize,
-				}),
-				Progress: "",
-				From:     i,
-				To:       i + interval,
-			}
-			if isZero && row.Count > 0 {
-				isZero = false
-			}
-			res.Histograms = append(res.Histograms, row)
+			wg.Add(1)
+			go func(st, et int64, wg *sync.WaitGroup) {
+				row := view.HighChart{
+					Count: op.Count(view.ReqQuery{
+						Table:         param.Table,
+						DatabaseTable: param.DatabaseTable,
+						Query:         param.Query,
+						ST:            st,
+						ET:            et,
+						Page:          param.Page,
+						PageSize:      param.PageSize,
+					}),
+					Progress: "",
+					From:     st,
+					To:       et,
+				}
+				if isZero && row.Count > 0 {
+					isZero = false
+				}
+				limiter <- row
+				wg.Done()
+				return
+			}(i, i+interval, wg)
+		}
+		wg.Wait()
+		close(limiter)
+		for d := range limiter {
+			res.Histograms = append(res.Histograms, d)
 		}
 	}
 	if isZero {
-		c.JSONE(core.CodeOK, "查询数据为空. ", nil)
+		c.JSONE(core.CodeOK, "the query data is empty", nil)
 		return
 	}
+	sort.Slice(res.Histograms, func(i int, j int) bool {
+		return res.Histograms[i].From < res.Histograms[j].From
+	})
 	c.JSONOK(res)
 	return
 }
 
-func Tables(c *core.Context) {
-	var param view.ReqQuery
-	err := c.Bind(&param)
-	if err != nil {
-		c.JSONE(core.CodeErr, "参数无效: "+err.Error(), nil)
-		return
-	}
-	if param.Database == "" {
-		c.JSONE(core.CodeErr, "db 为必填字段", nil)
-		return
-	}
-	op := service.InstanceManager.Load(param.DatasourceType, param.InstanceName)
-	if op == nil {
-		c.JSONE(core.CodeErr, "不存在对应配置实例:  ", nil)
-		return
-	}
-	res, err := op.Tables(param.Database)
-	if err != nil {
-		c.JSONE(core.CodeErr, "查询失败. "+err.Error(), nil)
-		return
-	}
-	c.JSONOK(res)
-	return
-}
-
-func Databases(c *core.Context) {
-	var param view.ReqDatabases
-	err := c.Bind(&param)
-	if err != nil {
-		c.JSONE(core.CodeErr, "参数无效: "+err.Error(), nil)
-		return
-	}
-	// 获取全部实例下的 databases
-	if param.DatasourceType == "" && param.InstanceName == "" {
-		ops := service.InstanceManager.All()
-		res := make([]view.RespDatabase, 0)
-		for _, op := range ops {
-			tmp, err := op.Databases()
-			if err != nil {
-				elog.Error("Databases", elog.String("err", err.Error()))
-				continue
-			}
-			res = append(res, tmp...)
-		}
-		c.JSONOK(res)
-		return
-	}
-	op := service.InstanceManager.Load(param.DatasourceType, param.InstanceName)
-	if op == nil {
-		c.JSONE(core.CodeErr, "未查询到对应实例数据 ", nil)
-		return
-	}
-	res, err := op.Databases()
-	if err != nil {
-		elog.Error("Databases", elog.String("err", err.Error()))
-	}
-	c.JSONOK(res)
-	return
-}
+//
+// func Databases(c *core.Context) {
+// 	var param view.ReqDatabases
+// 	err := c.Bind(&param)
+// 	if err != nil {
+// 		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
+// 		return
+// 	}
+// 	// 获取全部实例下的 databases
+// 	if param.InstanceId == 0 {
+// 		ops := service.InstanceManager.All()
+// 		res := make([]view.RespDatabase, 0)
+// 		for _, op := range ops {
+// 			tmp, err := op.Databases()
+// 			if err != nil {
+// 				elog.Error("Databases", elog.String("err", err.Error()))
+// 				continue
+// 			}
+// 			res = append(res, tmp...)
+// 		}
+// 		c.JSONOK(res)
+// 		return
+// 	}
+// 	op, err := service.InstanceManager.Load(param.InstanceId)
+// 	if err != nil {
+// 		c.JSONE(core.CodeErr, err.Error(), nil)
+// 		return
+// 	}
+// 	res, err := op.Databases()
+// 	if err != nil {
+// 		elog.Error("Databases", elog.String("err", err.Error()))
+// 	}
+// 	c.JSONOK(res)
+// 	return
+// }
 
 func Indexes(c *core.Context) {
 	var param view.ReqQuery
 	err := c.Bind(&param)
 	if err != nil {
-		c.JSONE(core.CodeErr, "参数无效: "+err.Error(), nil)
+		c.JSONE(core.CodeErr, "invalid parameter: "+err.Error(), nil)
 		return
 	}
+	tid := cast.ToInt(c.Param("id"))
+	indexId := cast.ToInt(c.Param("idx"))
+	if tid == 0 || indexId == 0 {
+		c.JSONE(core.CodeErr, "params error", nil)
+		return
+	}
+	tableInfo, _ := db.TableInfo(invoker.Db, tid)
+	param.Table = tableInfo.Name
+	param.Database = tableInfo.Database.Name
 	if param.Database == "" || param.Table == "" {
-		c.JSONE(core.CodeErr, "db 和 table 为必填字段", nil)
+		c.JSONE(core.CodeErr, "db and table are required fields", nil)
 		return
 	}
-	op := service.InstanceManager.Load(param.DatasourceType, param.InstanceName)
-	if op == nil {
-		c.JSONE(core.CodeErr, "不存在对应配置实例:  ", nil)
+	op, err := service.InstanceManager.Load(tableInfo.Database.Iid)
+	if err != nil {
+		c.JSONE(core.CodeErr, err.Error(), nil)
 		return
 	}
-	list := op.GroupBy(op.Prepare(param))
+	param, err = op.Prepare(param)
+	if err != nil {
+		c.JSONE(core.CodeErr, "invalid parameter. "+err.Error(), nil)
+		return
+	}
+	list := op.GroupBy(param)
+	elog.Debug("Indexes", elog.Any("list", list))
 
 	res := make([]view.RespIndexItem, 0)
 	sum := uint64(0)
@@ -197,6 +231,10 @@ func Indexes(c *core.Context) {
 		return res[i].Count > res[j].Count
 	})
 	elog.Debug("Indexes", elog.Any("res", res))
+	if len(res) > 10 {
+		c.JSONOK(res[:9])
+		return
+	}
 	c.JSONOK(res)
 	return
 }

@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import copy from 'copy-to-clipboard';
-import { message } from 'antd';
+import { useEffect, useRef, useState } from "react";
+import copy from "copy-to-clipboard";
+import { message } from "antd";
 import api, {
   DatabaseResponse,
   HighCharts,
-  InstanceSelectedType,
   LogsResponse,
-} from '@/services/dataLogs';
-import useRequest from '@/hooks/useRequest';
-import { currentTimeStamp } from '@/utils/momentUtils';
+  TablesResponse,
+} from "@/services/dataLogs";
+import useRequest from "@/hooks/useRequest/useRequest";
+import { currentTimeStamp } from "@/utils/momentUtils";
 import {
   ACTIVE_TIME_INDEX,
   FIFTEEN_TIME,
@@ -16,13 +16,17 @@ import {
   MINUTES_UNIT_TIME,
   PAGE_SIZE,
   TimeRangeType,
-} from '@/config/config';
-import moment from 'moment';
-import Request, { Canceler } from 'umi-request';
-import lodash from 'lodash';
+} from "@/config/config";
+import moment from "moment";
+import Request, { Canceler } from "umi-request";
+import lodash from "lodash";
+import { formatMessage } from "@@/plugin-locale/localeExports";
+import useLogLibrary from "@/models/datalogs/useLogLibrary";
+import useLogLibraryViews from "@/models/datalogs/useLogLibraryViews";
 
 export type PaneType = {
   pane: string;
+  paneId: number;
   start: number;
   end: number;
   keyword: string | undefined;
@@ -33,7 +37,7 @@ export type PaneType = {
 };
 
 export type QueryParams = {
-  logLibrary?: string;
+  // logLibrary?: TablesResponse;
   page?: number;
   pageSize?: number;
   st?: number;
@@ -42,6 +46,7 @@ export type QueryParams = {
 };
 
 const DataLogsModel = () => {
+  // 查询关键字
   const [keywordInput, setKeywordInput] = useState<string | undefined>();
   // 是否隐藏 Highcharts
   const [isHiddenHighChart, setIsHiddenHighChart] = useState<boolean>(false);
@@ -59,21 +64,32 @@ const DataLogsModel = () => {
   const [currentPage, setCurrentPage] = useState<number>();
 
   // 日志库列表
-  const [logLibraryList, setLogLibraryList] = useState<string[]>([]);
-  const [currentLogLibrary, setCurrentLogLibrary] = useState<string | undefined>();
+  const [logLibraryList, setLogLibraryList] = useState<TablesResponse[]>([]);
+  const [currentLogLibrary, setCurrentLogLibrary] = useState<
+    TablesResponse | undefined
+  >();
   const [highlightKeywords, setHighlightKeywords] = useState<
     { key: string; value: string }[] | undefined
   >();
   // 数据库列表
   const [databaseList, setDataBaseList] = useState<DatabaseResponse[]>([]);
-  const [currentDatabase, setCurrentDatabase] = useState<DatabaseResponse | undefined>();
+  const [currentDatabase, setCurrentDatabase] = useState<
+    DatabaseResponse | undefined
+  >();
 
   // 是否展示日志切换抽屉
-  const [visibleDataBaseDraw, setVisibleDataBaseDraw] = useState<boolean>(false);
+  const [visibleDataBaseDraw, setVisibleDataBaseDraw] =
+    useState<boolean>(false);
 
   // 时间选择器
-  const [activeTabKey, setActiveTabKey] = useState<string>(TimeRangeType.Relative);
+  const [activeTabKey, setActiveTabKey] = useState<string>(
+    TimeRangeType.Relative
+  );
   const [activeTimeOptionIndex, setActiveTimeOptionIndex] = useState(2);
+  const [currentRelativeAmount, setCurrentRelativeAmount] =
+    useState<number>(15);
+  const [currentRelativeUnit, setCurrentRelativeUnit] =
+    useState<string>("minutes");
 
   // 日志 Tab 标签
   const [logPanes, setLogPanes] = useState<PaneType[]>([]);
@@ -85,6 +101,32 @@ const DataLogsModel = () => {
   const cancelTokenHighChartsRef = useRef<Canceler | null>(null);
   const cancelTokenLogsRef = useRef<Canceler | null>(null);
   const CancelToken = Request.CancelToken;
+
+  const {
+    logLibraryCreatedModalVisible,
+    logLibraryInfoDrawVisible,
+    onChangeLogLibraryInfoDrawVisible,
+    onChangeLogLibraryCreatedModalVisible,
+    doCreatedLogLibrary,
+    doGetLogLibrary,
+    doDeletedLogLibrary,
+  } = useLogLibrary();
+
+  const {
+    viewsVisibleDraw,
+    onChangeViewsVisibleDraw,
+    getViewList,
+    viewList,
+    viewVisibleModal,
+    viewIsEdit,
+    createdView,
+    deletedView,
+    updatedView,
+    doGetViewInfo,
+    editView,
+    onChangeViewVisibleModal,
+    onChangeViewIsEdit,
+  } = useLogLibraryViews();
 
   const onChangeHiddenHighChart = (flag: boolean) => {
     setIsHiddenHighChart(flag);
@@ -105,7 +147,7 @@ const DataLogsModel = () => {
     setCurrentDatabase(database);
   };
 
-  const onChangeLogLibrary = (logLibrary: string | undefined) => {
+  const onChangeLogLibrary = (logLibrary: TablesResponse | undefined) => {
     setCurrentLogLibrary(logLibrary);
   };
 
@@ -119,6 +161,14 @@ const DataLogsModel = () => {
 
   const onChangeActiveTimeOptionIndex = (index: number) => {
     setActiveTimeOptionIndex(index);
+  };
+
+  const onChangeCurrentRelativeAmount = (amount: number) => {
+    setCurrentRelativeAmount(amount);
+  };
+
+  const onChangeCurrentRelativeUnit = (unit: string) => {
+    setCurrentRelativeUnit(unit);
   };
 
   const onChangeLogPanes = (panes: PaneType[]) => {
@@ -136,12 +186,32 @@ const DataLogsModel = () => {
     onChangeLogPanes(currentLogPanes);
   };
 
+  const onChangeCurrentLogPane = (tabPane: PaneType) => {
+    const queryParam: QueryParams = {
+      page: tabPane?.page,
+      pageSize: tabPane?.pageSize,
+      st: tabPane?.start,
+      et: tabPane?.end,
+      kw: tabPane?.keyword,
+    };
+    onChangeLogsPage(tabPane?.page as number, tabPane?.pageSize as number);
+    onChangeEndDateTime(tabPane?.end as number);
+    onChangeStartDateTime(tabPane?.start as number);
+    onChangeKeywordInput(tabPane?.keyword as string);
+    onChangeActiveTabKey(tabPane?.activeTabKey || TimeRangeType.Relative);
+    onChangeActiveTimeOptionIndex(tabPane?.activeIndex || ACTIVE_TIME_INDEX);
+    resetCurrentHighChart();
+    doGetLogs(queryParam);
+    doGetHighCharts(queryParam);
+    doParseQuery(queryParam?.kw);
+  };
+
   const onCopyRawLogDetails = (log: any) => {
     if (log) {
-      copy(JSON.stringify(log));
-      message.success('复制成功');
+      copy(typeof log === "object" ? JSON.stringify(log) : log);
+      message.success(formatMessage({ id: "log.item.copy.success" }));
     } else {
-      message.error('复制失败，请手动复制');
+      message.error(formatMessage({ id: "log.item.copy.failed" }));
     }
   };
 
@@ -158,6 +228,8 @@ const DataLogsModel = () => {
     setCurrentPage(page);
     setPageSize(size);
   };
+
+  const getTableId = useRequest(api.getTableId, { loadingText: false }).run;
 
   const getLogs = useRequest(api.getLogs, {
     loadingText: false,
@@ -197,19 +269,20 @@ const DataLogsModel = () => {
   });
 
   const settingIndexes = useRequest(api.setIndexes, {
-    loadingText: { loading: undefined, done: '保存成功' },
+    loadingText: false,
+    onSuccess() {
+      message.success(
+        formatMessage({ id: "log.index.manage.message.save.success" })
+      );
+    },
   });
 
   const getIndexList = useRequest(api.getIndexes, {
     loadingText: false,
   });
 
-  const logsAndHighChartsPayload = (database: DatabaseResponse, params?: QueryParams) => {
+  const logsAndHighChartsPayload = (params?: QueryParams) => {
     return {
-      dt: database.datasourceType,
-      db: database.databaseName,
-      in: database.instanceName,
-      table: params?.logLibrary || (currentLogLibrary as string),
       st: params?.st || (startDateTime as number),
       et: params?.et || (endDateTime as number),
       query: params?.kw || keywordInput,
@@ -219,39 +292,37 @@ const DataLogsModel = () => {
   };
 
   const doGetLogs = (params?: QueryParams) => {
-    if (currentDatabase) {
+    if (currentLogLibrary) {
       cancelTokenLogsRef.current?.();
       getLogs.run(
-        logsAndHighChartsPayload(currentDatabase, params),
+        currentLogLibrary.id,
+        logsAndHighChartsPayload(params),
         new CancelToken(function executor(c) {
           cancelTokenLogsRef.current = c;
-        }),
+        })
       );
     }
   };
   const doGetHighCharts = (params?: QueryParams) => {
-    if (currentDatabase) {
+    if (currentLogLibrary) {
       cancelTokenHighChartsRef.current?.();
       getHighCharts.run(
-        logsAndHighChartsPayload(currentDatabase, params),
+        currentLogLibrary.id,
+        logsAndHighChartsPayload(params),
         new CancelToken(function executor(c) {
           cancelTokenHighChartsRef.current = c;
-        }),
+        })
       );
     }
   };
 
   const doGetLogLibraryList = () => {
     if (currentDatabase) {
-      getLogLibraries.run({
-        dt: currentDatabase.datasourceType,
-        db: currentDatabase.databaseName,
-        in: currentDatabase.instanceName,
-      });
+      getLogLibraries.run(currentDatabase.id);
     }
   };
 
-  const doGetDatabaseList = (selectedInstance?: InstanceSelectedType | undefined) => {
+  const doGetDatabaseList = (selectedInstance?: number | undefined) => {
     getDatabases.run(selectedInstance);
   };
 
@@ -260,20 +331,36 @@ const DataLogsModel = () => {
   };
 
   const doParseQuery = (keyword?: string) => {
-    const defaultInput = lodash.cloneDeep(keyword ? keyword : keywordInput) || '';
-    const strReg = /(\w+)='([^']+)'/g;
-    const allQuery = defaultInput.match(strReg)?.map((item) => {
+    const defaultInput =
+      lodash.cloneDeep(keyword ? keyword : keywordInput) || "";
+    const strReg = /(\w+)(=| like )'([^']+)'/g;
+    const allQuery = Array.from(defaultInput.matchAll(strReg))?.map((item) => {
       return {
-        key: item.replaceAll("'", '').split('=')[0],
-        value: item.replaceAll("'", '').split('=')[1],
+        key: item[1],
+        value: item[3],
       };
     });
     setHighlightKeywords(allQuery);
   };
 
+  const doUpdatedQuery = (currentSelected: string) => {
+    const defaultValueArr =
+      lodash.cloneDeep(keywordInput)?.split(" and ") || [];
+    if (defaultValueArr.length === 1 && defaultValueArr[0] === "")
+      defaultValueArr.pop();
+    defaultValueArr.push(currentSelected);
+    const kw = defaultValueArr.join(" and ");
+    onChangeKeywordInput(kw);
+    doGetLogs({ kw });
+    doGetHighCharts({ kw });
+    doParseQuery(kw);
+  };
+
   const resetLogs = () => {
     onChangeEndDateTime(currentTimeStamp());
-    onChangeStartDateTime(moment().subtract(FIFTEEN_TIME, MINUTES_UNIT_TIME).unix());
+    onChangeStartDateTime(
+      moment().subtract(FIFTEEN_TIME, MINUTES_UNIT_TIME).unix()
+    );
     onChangeLogsPage(FIRST_PAGE, PAGE_SIZE);
     onChangeKeywordInput(undefined);
     onChangeActiveTabKey(TimeRangeType.Relative);
@@ -295,23 +382,25 @@ const DataLogsModel = () => {
   };
 
   useEffect(() => {
-    if (currentDatabase && currentLogLibrary) {
+    if (currentLogLibrary && pageSize && currentPage) {
       cancelTokenLogsRef.current?.();
       cancelTokenHighChartsRef.current?.();
       getLogs.run(
-        logsAndHighChartsPayload(currentDatabase, { logLibrary: currentLogLibrary }),
+        currentLogLibrary.id,
+        logsAndHighChartsPayload(),
         new CancelToken(function executor(c) {
           cancelTokenLogsRef.current = c;
-        }),
+        })
       );
       getHighCharts.run(
-        logsAndHighChartsPayload(currentDatabase, { logLibrary: currentLogLibrary }),
+        currentLogLibrary.id,
+        logsAndHighChartsPayload(),
         new CancelToken(function executor(c) {
           cancelTokenHighChartsRef.current = c;
-        }),
+        })
       );
     }
-  }, [pageSize, currentPage]);
+  }, [pageSize, currentPage, currentLogLibrary]);
 
   useEffect(() => {
     if (!currentDatabase) {
@@ -345,6 +434,8 @@ const DataLogsModel = () => {
     logsLoading: getLogs.loading,
     highChartLoading: getHighCharts.loading,
     activeTabKey,
+    currentRelativeAmount,
+    currentRelativeUnit,
     activeTimeOptionIndex,
     highlightKeywords,
     logPanes,
@@ -366,22 +457,52 @@ const DataLogsModel = () => {
     onChangeLogsPageByUrl,
     onChangeActiveTabKey,
     onChangeActiveTimeOptionIndex,
+    onChangeCurrentRelativeAmount,
+    onChangeCurrentRelativeUnit,
     onChangeLogPanes,
     onChangeLogPane,
     onChangeVisibleDatabaseDraw,
     onChangeVisibleIndexModal,
     onChangeHiddenHighChart,
+    onChangeCurrentLogPane,
 
     doSelectedDatabase,
     doParseQuery,
+    doUpdatedQuery,
 
     resetLogs,
     resetCurrentHighChart,
     setChangeTabPane,
 
+    getTableId,
+    getDatabases,
     settingIndexes,
     getLogLibraries,
+
     getIndexList,
+
+    // hooks
+    logLibraryCreatedModalVisible,
+    logLibraryInfoDrawVisible,
+    onChangeLogLibraryCreatedModalVisible,
+    onChangeLogLibraryInfoDrawVisible,
+    doCreatedLogLibrary,
+    doDeletedLogLibrary,
+    doGetLogLibrary,
+
+    viewsVisibleDraw,
+    getViewList,
+    viewList,
+    viewIsEdit,
+    createdView,
+    deletedView,
+    updatedView,
+    viewVisibleModal,
+    editView,
+    doGetViewInfo,
+    onChangeViewIsEdit,
+    onChangeViewVisibleModal,
+    onChangeViewsVisibleDraw,
   };
 };
 export default DataLogsModel;

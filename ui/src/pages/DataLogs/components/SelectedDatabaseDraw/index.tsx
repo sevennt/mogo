@@ -1,37 +1,44 @@
-import databaseDrawStyle from '@/pages/DataLogs/components/SelectedDatabaseDraw/index.less';
-import { Button, Drawer, Select, Table, Tooltip } from 'antd';
-import { useModel } from '@@/plugin-model/useModel';
-import type { DatabaseResponse } from '@/services/dataLogs';
-import type  { AlignType } from 'rc-table/lib/interface';
-import { useEffect } from 'react';
-import type  { InstanceType } from '@/services/systemSetting';
-import FilterTableColumn from '@/components/FilterTableColumn';
-type SelectedDatabaseDrawProps = {};
+import databaseDrawStyle from "@/pages/DataLogs/components/SelectedDatabaseDraw/index.less";
+import { Button, Drawer, Select, Space, Table, Tooltip } from "antd";
+import { useModel } from "@@/plugin-model/useModel";
+import type { DatabaseResponse } from "@/services/dataLogs";
+import type { AlignType } from "rc-table/lib/interface";
+import { useEffect } from "react";
+import type { InstanceType } from "@/services/systemSetting";
+import FilterTableColumn from "@/components/FilterTableColumn";
+import { useIntl } from "umi";
+import CreatedDatabaseModal from "@/pages/DataLogs/components/SelectedDatabaseDraw/CreatedDatabaseModal";
+import IconFont from "@/components/IconFont";
+import classNames from "classnames";
+import instanceTableStyles from "@/pages/SystemSetting/InstancePanel/components/InstanceTable/index.less";
 
 const { Option } = Select;
-const SelectedDataBaseDraw = (props: SelectedDatabaseDrawProps) => {
+const SelectedDataBaseDraw = () => {
   const {
     databaseList,
+    getDatabases,
     visibleDataBaseDraw,
     doSelectedDatabase,
     doGetDatabaseList,
     onChangeLogLibrary,
     onChangeVisibleDatabaseDraw,
     onChangeLogPanes,
-  } = useModel('dataLogs');
+  } = useModel("dataLogs");
   const {
     doGetInstanceList,
     getInstanceList,
     instanceList,
     selectedInstance,
     onChangeSelectedInstance,
-  } = useModel('systemSetting');
+  } = useModel("instances");
+  const { onChangeCreatedDatabaseModal } = useModel("database");
+  const i18n = useIntl();
 
-  const datasourceTypeList = [{ name: 'ClickHouse', value: 'ch' }];
+  const datasourceTypeList = [{ name: "ClickHouse", value: "ch" }];
 
   useEffect(() => {
-    doGetDatabaseList(selectedInstance);
-  }, [selectedInstance]);
+    if (visibleDataBaseDraw) doGetDatabaseList(selectedInstance);
+  }, [selectedInstance, visibleDataBaseDraw]);
 
   useEffect(() => {
     if (visibleDataBaseDraw) {
@@ -43,12 +50,12 @@ const SelectedDataBaseDraw = (props: SelectedDatabaseDrawProps) => {
 
   const column = [
     {
-      title: '数据库',
-      dataIndex: 'databaseName',
-      width: '40%',
-      align: 'center' as AlignType,
+      title: i18n.formatMessage({ id: "datasource.draw.table.datasource" }),
+      dataIndex: "name",
+      width: "40%",
+      align: "center" as AlignType,
       ellipsis: { showTitle: false },
-      ...FilterTableColumn('databaseName'),
+      ...FilterTableColumn("databaseName"),
       render: (databaseName: string, record: DatabaseResponse) => (
         <Tooltip title={databaseName}>
           <Button
@@ -58,26 +65,43 @@ const SelectedDataBaseDraw = (props: SelectedDatabaseDrawProps) => {
               onChangeVisibleDatabaseDraw(false);
               onChangeLogPanes([]);
             }}
-            size={'small'}
-            type={'link'}
-            style={{ width: '100%', padding: 0 }}
+            size={"small"}
+            type={"link"}
+            style={{ width: "100%", padding: 0 }}
           >
-            <span className={databaseDrawStyle.textOmission}>{databaseName}</span>
+            <span className={databaseDrawStyle.textOmission}>
+              {databaseName}
+            </span>
           </Button>
         </Tooltip>
       ),
     },
-    { title: '实例', dataIndex: 'instanceName', align: 'center' as AlignType, width: '30%' },
     {
-      title: '数据源类型',
-      dataIndex: 'datasourceType',
-      width: '30%',
-      align: 'center' as AlignType,
+      title: i18n.formatMessage({ id: "datasource.draw.table.instance" }),
+      dataIndex: "iid",
+      align: "center" as AlignType,
+      width: "30%",
+      render: (iid: number) => {
+        const instance = instanceList.find((item) => item.id === iid);
+        if (!instance) return <span>-</span>;
+        return (
+          <Tooltip title={instance.instanceName}>
+            <span>{instance.instanceName}</span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: i18n.formatMessage({ id: "datasource.draw.table.type" }),
+      dataIndex: "datasourceType",
+      width: "30%",
+      align: "center" as AlignType,
       ellipsis: { showTitle: false },
       render: (datasourceType: string) => {
         const result =
           datasourceTypeList.filter(
-            (item: { name: string; value: string }) => item.value === datasourceType,
+            (item: { name: string; value: string }) =>
+              item.value === datasourceType
           ) || [];
         if (result.length > 0)
           return (
@@ -86,7 +110,11 @@ const SelectedDataBaseDraw = (props: SelectedDatabaseDrawProps) => {
             </Tooltip>
           );
         return (
-          <Tooltip title={'无数据源类型'}>
+          <Tooltip
+            title={i18n.formatMessage({
+              id: "datasource.draw.table.empty.type.tip",
+            })}
+          >
             <span>-</span>
           </Tooltip>
         );
@@ -98,60 +126,70 @@ const SelectedDataBaseDraw = (props: SelectedDatabaseDrawProps) => {
       title={
         <div
           style={{
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            width: "100%",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
           <div>
-            <span>数据库切换</span>
+            <span>{i18n.formatMessage({ id: "datasource.draw.title" })}</span>
           </div>
-          <Select
-            allowClear
-            value={JSON.stringify(selectedInstance)}
-            style={{ width: '60%' }}
-            placeholder={'请选择实例'}
-            onChange={(value: string | undefined) => {
-              onChangeSelectedInstance(value ? JSON.parse(value) : undefined);
-            }}
-          >
-            {instanceList.map((item: InstanceType, index: number) => (
-              <Option
-                key={index}
-                value={JSON.stringify({
-                  instanceName: item.instanceName,
-                  datasourceType: item.datasource,
-                })}
-              >
-                {item.instanceName}
-              </Option>
-            ))}
-          </Select>
+          <Space style={{ width: "60%" }}>
+            <Select
+              allowClear
+              value={selectedInstance}
+              style={{ width: "100%" }}
+              placeholder={`${i18n.formatMessage({
+                id: "datasource.draw.selected",
+              })}`}
+              onChange={(value: number) => {
+                onChangeSelectedInstance(value);
+              }}
+            >
+              {instanceList.map((item: InstanceType, index: number) => (
+                <Option key={index} value={item.id as number}>
+                  {item.instanceName}
+                </Option>
+              ))}
+            </Select>
+            <Tooltip
+              title={i18n.formatMessage({
+                id: "instance.operation.addDatabase",
+              })}
+              placement={"bottomRight"}
+            >
+              <IconFont
+                onClick={() => {
+                  onChangeCreatedDatabaseModal(true);
+                }}
+                className={classNames(instanceTableStyles.instanceTableIcon)}
+                type={"icon-add-database"}
+              />
+            </Tooltip>
+          </Space>
         </div>
       }
       className={databaseDrawStyle.databaseDrawMain}
       placement="right"
       closable
       visible={visibleDataBaseDraw}
-      mask={false}
       getContainer={false}
-      width={'35vw'}
+      width={"35vw"}
       onClose={() => onChangeVisibleDatabaseDraw(false)}
       bodyStyle={{ padding: 10 }}
       headerStyle={{ padding: 10 }}
     >
       <Table
-        loading={getInstanceList.loading}
+        loading={getInstanceList.loading || getDatabases.loading}
         bordered
-        rowKey={(record: DatabaseResponse) =>
-          `${record.databaseName}-${record.instanceId}-${record.instanceName}-${record.datasourceType}`
-        }
-        size={'small'}
+        rowKey={(record: DatabaseResponse) => `${record.iid}-${record.id}`}
+        size={"small"}
         columns={column}
         dataSource={databaseList}
-        pagination={{ responsive: true, showSizeChanger: true, size: 'small' }}
+        pagination={{ responsive: true, showSizeChanger: true, size: "small" }}
       />
+      <CreatedDatabaseModal />
     </Drawer>
   );
 };

@@ -1,21 +1,19 @@
-import { request } from 'umi';
+import { request } from "umi";
+import { TimeBaseType } from "@/services/systemSetting";
 
-export interface DatabaseProps {
-  dt: string;
-}
-
-export interface DataSourceTableProps extends DatabaseProps {
-  db: string;
-  in: string;
-}
-
-export interface QueryLogsProps extends DataSourceTableProps {
-  table: string;
+export interface QueryLogsProps {
   st: number;
   et: number;
   query?: string | undefined;
   pageSize?: number;
   page?: number;
+}
+
+export interface GetTableIdRequest {
+  instance: string;
+  database: string;
+  datasource: string;
+  table: string;
 }
 
 export interface LogsResponse {
@@ -25,7 +23,7 @@ export interface LogsResponse {
   cpuSec: number;
   elapsedMillisecond: number;
   hasSQL: boolean;
-  keys: string[];
+  keys: IndexInfoType[];
   limited: number;
   logs: any[];
   marker: string;
@@ -33,6 +31,37 @@ export interface LogsResponse {
   progress: string;
   terms: string[][];
   whereQuery: string;
+}
+
+export interface ViewResponse {
+  id: number;
+  viewName: string;
+}
+export interface CreatedLogLibraryRequest {
+  tableName: string;
+  typ: number;
+  days: number;
+  brokers: string;
+  topics: string;
+}
+
+export interface CreatedViewRequest {
+  id?: number;
+  viewName: string;
+  isUseDefaultTime: number;
+  key?: string;
+  format?: string;
+}
+
+export interface ViewInfoResponse extends TimeBaseType {
+  id: number;
+  uid: number;
+  tid: number;
+  name: string;
+  isUseDefaultTime: number;
+  key: string;
+  format: string;
+  sql_view: string;
 }
 
 export interface HighChartsResponse {
@@ -49,35 +78,51 @@ export interface HighCharts {
 }
 
 export interface DatabaseResponse {
-  databaseName: string;
-  instanceId: number;
-  instanceName: string;
   datasourceType: string;
+  id: number;
+  iid: number;
+  name: string;
+  uid?: number;
 }
 
-export interface InstanceSelectedType {
-  instanceName: string;
-  datasourceType: string;
+export interface TablesResponse {
+  id: number;
+  tableName: string;
+}
+
+export interface TableInfoResponse {
+  brokers: string;
+  days: number;
+  did: number;
+  name: string;
+  sqlContent: TableSqlContent;
+  topic: string;
+  typ: number;
+  uid: number;
+  database: DatabaseResponse;
+}
+
+export interface TableSqlContent {
+  keys: string[];
+  data: any;
 }
 
 export interface IndexInfoType {
+  id: number;
+  tid: number;
   field: string;
   alias: string;
   typ: number;
 }
 
 export interface IndexRequest {
-  instanceId: number;
-  database: string;
-  table: string;
   data?: IndexInfoType[];
 }
 
-export interface IndexDetailRequest extends DataSourceTableProps {
-  table: string;
+export interface IndexDetailRequest {
   st: number;
   et: number;
-  field: string;
+  query?: string | undefined;
 }
 
 export interface IndexDetail {
@@ -87,66 +132,141 @@ export interface IndexDetail {
 }
 
 export default {
-  // 获取海图信息
-  async getHighCharts(params: QueryLogsProps, cancelToken: any) {
-    return request<API.Res<HighChartsResponse>>(`/api/v1/query/charts`, {
+  // Get chart information
+  async getHighCharts(
+    tableId: number,
+    params: QueryLogsProps,
+    cancelToken: any
+  ) {
+    return request<API.Res<HighChartsResponse>>(
+      `/api/v1/tables/${tableId}/charts`,
+      {
+        cancelToken,
+        method: "GET",
+        params,
+        skipErrorHandler: true,
+      }
+    );
+  },
+
+  // Get log information
+  async getLogs(tableId: number, params: QueryLogsProps, cancelToken: any) {
+    return request<API.Res<LogsResponse>>(`/api/v1/tables/${tableId}/logs`, {
       cancelToken,
-      method: 'GET',
+      method: "GET",
       params,
       skipErrorHandler: true,
     });
   },
 
-  // 获取日志信息
-  async getLogs(params: QueryLogsProps, cancelToken: any) {
-    return request<API.Res<LogsResponse>>(`/api/v1/query/logs`, {
-      cancelToken,
-      method: 'GET',
+  // Get a list of log stores
+  async getTableList(did: number) {
+    return request<API.Res<TablesResponse[]>>(
+      `/api/v1/databases/${did}/tables`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  // Create a log library
+  async createdTable(did: number, data: CreatedLogLibraryRequest) {
+    return request<API.Res<string>>(`/api/v1/databases/${did}/tables`, {
+      method: "POST",
+      data,
+    });
+  },
+
+  // Deleting a Log Library
+  async deletedTable(id: number) {
+    return request<API.Res<string>>(`/api/v1/tables/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Get log library details
+  async getTableInfo(id: number) {
+    return request<API.Res<TableInfoResponse>>(`api/v1/tables/${id}`, {
+      method: "GET",
+    });
+  },
+
+  // Obtain the table id from the third-party channel
+  async getTableId(params: GetTableIdRequest) {
+    return request<API.Res<number>>(`/api/v1/table/id`, {
+      method: "GET",
       params,
-      skipErrorHandler: true,
     });
   },
 
-  // 获取日志库列表
-  async getTableList(params: DataSourceTableProps) {
-    return request<API.Res<string[]>>(`/api/v1/query/tables`, { method: 'GET', params });
+  // Get a list of databases
+  async getDatabaseList(iid: number | undefined) {
+    return request<API.Res<DatabaseResponse[]>>(
+      `/api/v1/instances/${iid || 0}/databases`,
+      {
+        method: "GET",
+      }
+    );
   },
 
-  // 获取数据库列表
-  async getDatabaseList(payload: InstanceSelectedType | undefined) {
-    return request<API.Res<DatabaseResponse[]>>(`/api/v1/query/databases`, {
-      method: 'GET',
-      params: { dt: payload?.datasourceType, in: payload?.instanceName },
+  // Get index details
+  async getIndexDetail(tid: number, id: number, params: IndexDetailRequest) {
+    return request<API.Res<IndexDetail[]>>(
+      `/api/v1/tables/${tid}/indexes/${id}`,
+      {
+        method: "GET",
+        params,
+      }
+    );
+  },
+
+  // Add or modify index
+  async setIndexes(tid: number, data: IndexRequest) {
+    return request<API.Res<string>>(`/api/v1/tables/${tid}/indexes`, {
+      method: "PATCH",
+      data,
     });
   },
 
-  // async getIndexes({
-  //   dt: string,
-  //   in: string,
-  //   db: string,
-  //   table: string,
-  //   field: string,
-  //   st: number,
-  //   et: string,
-  // }) {
-  //   return request(
-  //     `/api/v1/query/indexes?dt=ch&in=dev&db=devlogs&table=ingress_stdout&field=method&st=1&et=1640228013`,
-  //   );
-  // },
-  // /api/v1/query/indexes?dt=ch&in=dev&db=devlogs&table=ingress_stdout&field=method&st=1&et=1640228013
-
-  // 获取索引详情
-  async getIndexDetail(params: IndexDetailRequest) {
-    return request<API.Res<IndexDetail[]>>(`/api/v1/query/indexes`, { method: 'GET', params });
+  // Get Index Edit List
+  async getIndexes(tid: number) {
+    return request<API.Res<IndexInfoType[]>>(`/api/v1/tables/${tid}/indexes`, {
+      method: "GET",
+    });
   },
 
-  // 增加 or 修改索引
-  async setIndexes(data: IndexRequest) {
-    return request<API.Res<string>>(`/api/v1/setting/indexes`, { method: 'PATCH', data });
+  // Obtain log configuration rules
+  async getViews(tid: number) {
+    return request<API.Res<ViewResponse[]>>(`/api/v1/tables/${tid}/views`, {
+      method: "GET",
+    });
+  },
+  // Create a log configuration rule
+  async createdView(tid: number, data: CreatedViewRequest) {
+    return request<API.Res<string>>(`/api/v1/tables/${tid}/views`, {
+      method: "POST",
+      data,
+    });
   },
 
-  // 获取索引编辑列表
-  async getIndexes(params: IndexRequest) {
-    return request<API.Res<IndexInfoType[]>>(`/api/v1/setting/indexes`, { method: 'GET', params });
+  // Update log configuration rules
+  async updatedView(id: number, data: CreatedViewRequest) {
+    return request<API.Res<string>>(`/api/v1/views/${id}`, {
+      method: "PATCH",
+      data,
+    });
+  },
+
+  async deletedView(id: number) {
+    return request<API.Res<string>>(`/api/v1/views/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  // Obtain rule details
+  async getViewInfo(id: number) {
+    return request<API.Res<ViewInfoResponse>>(`/api/v1/views/${id}`, {
+      method: "GET",
+    });
   },
 };

@@ -1,0 +1,45 @@
+@import "../../styles/var.less";
+
+.jsonView {
+  display: inline;
+  line-height: 21px;
+  .jsonViewIcon {
+    display: inline-block;
+    margin: 2px 4px;
+  }
+}
+
+.jsonViewKey {
+  color: @font-color;
+  background: @primary-color-8;
+}
+
+.jsonViewValue {
+  padding-left: 8px;
+  color: @font-color;
+  white-space: pre-wrap;
+}
+
+.jsonViewHighlight {
+  color: @primary-color-90;
+  font-weight: bold;
+  word-break: break-all;
+  cursor: pointer;
+  &:hover {
+    color: @primary-color-90;
+  }
+}
+
+.jsonViewValueHover {
+  &:hover {
+    color: @primary-color-90;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
+
+.jsonViewArrayItem {
+  & > .jsonViewValue {
+    padding-left: 0;
+  }
+}

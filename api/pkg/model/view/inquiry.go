@@ -1,27 +1,24 @@
 package view
 
-type ReqDatabases struct {
-	DatasourceType string `form:"dt"`
-	InstanceName   string `form:"in"`
-}
+import (
+	"github.com/shimohq/mogo/api/pkg/model/db"
+)
 
 type ReqQuery struct {
-	DatasourceType string `form:"dt" binding:"required"`
-	InstanceName   string `form:"in" binding:"required"`
-	Database       string `form:"db"`
-	Table          string `form:"table"`
-	DatabaseTable  string `form:"database_table"`
-	Field          string `form:"field"`
-	Query          string `form:"query"`
-	ST             int64  `form:"st"`
-	ET             int64  `form:"et"`
-	Page           uint32 `form:"page"`
-	PageSize       uint32 `form:"pageSize"`
+	Database      string `form:"database"`
+	Table         string `form:"table"`
+	DatabaseTable string `form:"databaseTable"`
+	Field         string `form:"field"`
+	Query         string `form:"query"`
+	ST            int64  `form:"st"`
+	ET            int64  `form:"et"`
+	Page          uint32 `form:"page"`
+	PageSize      uint32 `form:"pageSize"`
 }
 
 type RespQuery struct {
 	Limited            uint32                   `json:"limited"`
-	Keys               []string                 `json:"keys"`
+	Keys               []*db.Index              `json:"keys"`
 	ElapsedMillisecond int                      `json:"elapsedMillisecond"`
 	Count              uint64                   `json:"count"`
 	HasSQL             bool                     `json:"hasSQL"`
